@@ -1,0 +1,87 @@
+{
+  "title": "Muse Studio Imagen Queue",
+  "uid": "muse-imagen-queue",
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "30s",
+  "time": {
+    "from": "now-6h",
+    "to": "now"
+  },
+  "panels": [
+    {
+      "type": "stat",
+      "title": "Queue Alert State",
+      "gridPos": { "h": 4, "w": 6, "x": 0, "y": 0 },
+      "targets": [
+        { "refId": "A", "expr": "imagen_queue_alert_state" }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [
+            { "type": "value", "options": { "0": { "text": "ok" }, "1": { "text": "warn" }, "2": { "text": "critical" } } }
+          ],
+          "thresholds": { "mode": "absolute", "steps": [ { "color": "green", "value": null }, { "color": "yellow", "value": 1 }, { "color": "red", "value": 2 } ] }
+        }
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Queue Depth",
+      "gridPos": { "h": 8, "w": 12, "x": 6, "y": 0 },
+      "targets": [
+        { "refId": "A", "expr": "imagen_queue_queued", "legendFormat": "queued" },
+        { "refId": "B", "expr": "imagen_queue_processing", "legendFormat": "processing" },
+        { "refId": "C", "expr": "imagen_queue_failed", "legendFormat": "failed" }
+      ]
+    },
+    {
+      "type": "stat",
+      "title": "Worker Running",
+      "gridPos": { "h": 4, "w": 6, "x": 18, "y": 0 },
+      "targets": [
+        { "refId": "A", "expr": "imagen_worker_running" }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [
+            { "type": "value", "options": { "0": { "text": "down" }, "1": { "text": "running" } } }
+          ],
+          "thresholds": { "mode": "absolute", "steps": [ { "color": "red", "value": null }, { "color": "green", "value": 1 } ] }
+        }
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Latency (ms)",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
+      "targets": [
+        { "refId": "A", "expr": "imagen_queue_queue_wait_avg_ms", "legendFormat": "queue_wait_avg" },
+        { "refId": "B", "expr": "imagen_queue_processing_avg_ms", "legendFormat": "processing_avg" },
+        { "refId": "C", "expr": "imagen_queue_end_to_end_avg_ms", "legendFormat": "end_to_end_avg" }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Latency Thresholds (ms)",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 },
+      "targets": [
+        { "refId": "A", "expr": "imagen_queue_threshold_queue_wait_warn_ms", "legendFormat": "queue_wait_warn" },
+        { "refId": "B", "expr": "imagen_queue_threshold_queue_wait_critical_ms", "legendFormat": "queue_wait_critical" },
+        { "refId": "C", "expr": "imagen_queue_threshold_end_to_end_warn_ms", "legendFormat": "e2e_warn" },
+        { "refId": "D", "expr": "imagen_queue_threshold_end_to_end_critical_ms", "legendFormat": "e2e_critical" }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Worker Timing (ms)",
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 16 },
+      "targets": [
+        { "refId": "A", "expr": "imagen_worker_heartbeat_age_ms", "legendFormat": "heartbeat_age" },
+        { "refId": "B", "expr": "imagen_worker_last_activity_age_ms", "legendFormat": "last_activity_age" },
+        { "refId": "C", "expr": "imagen_worker_last_sweep_age_ms", "legendFormat": "last_sweep_age" }
+      ]
+    }
+  ]
+}

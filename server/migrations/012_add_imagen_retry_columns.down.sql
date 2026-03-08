@@ -1,0 +1,2 @@
+-- sqlite cannot safely drop columns without table rebuild.
+-- no-op rollback for additive retry metadata columns.

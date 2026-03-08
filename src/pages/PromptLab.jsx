@@ -147,7 +147,13 @@ function getGenerationAssets(generation) {
   return normalizeImageAssets(legacy);
 }
 
+function getProviderImageMeta(generation, assetId) {
+  const providerImages = Array.isArray(generation?.raw?.images) ? generation.raw.images : [];
+  return providerImages.find((item) => item?.id === assetId) || null;
+}
+
 export default function PromptLab() {
+  const isDev = Boolean(import.meta.env.DEV);
   const [brief, setBrief] = useState("");
   const [preset, setPreset] = useState("Dior Chiaroscuro");
   const [output, setOutput] = useState(null);
@@ -677,8 +683,15 @@ export default function PromptLab() {
                   Model: {output.generation.model}
                 </div>
               </div>
+              {isDev && (
+                <div className="mb-3 rounded-lg border border-neutral-800 bg-black px-3 py-2 text-xs text-neutral-400">
+                  provider: {output.generation.provider || output.generation.raw?.provider || "unknown"} | generation_time_ms: {output.generation.generationTimeMs || output.generation.raw?.generation_time_ms || 0}
+                </div>
+              )}
               <div className="grid min-w-0 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                {getGenerationAssets(output.generation).map((image) => (
+                {getGenerationAssets(output.generation).map((image) => {
+                  const providerMeta = getProviderImageMeta(output.generation, image.id);
+                  return (
                   <div
                     key={image.id}
                     className="overflow-hidden rounded-xl border border-neutral-800 bg-black"
@@ -688,8 +701,14 @@ export default function PromptLab() {
                       alt={image.id}
                       className="h-full w-full object-cover"
                     />
+                    {isDev && (
+                      <div className="border-t border-neutral-800 px-2 py-1 text-[11px] text-neutral-400">
+                        asset_key: {providerMeta?.asset_key || "n/a"}
+                      </div>
+                    )}
                   </div>
-                ))}
+                  );
+                })}
               </div>
             </Card>
           )}

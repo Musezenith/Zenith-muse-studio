@@ -1,6 +1,10 @@
 import http from "node:http";
 import { randomUUID } from "node:crypto";
-import { generateViaVertexImagen, getTimeoutMs } from "./imagenService.mjs";
+import {
+  generateViaVertexImagen,
+  getImagenProviderRuntimeInfo,
+  getTimeoutMs,
+} from "./imagenService.mjs";
 import {
   clearArchiveRuns,
   deleteArchiveRun,
@@ -45,11 +49,34 @@ import {
   initializeQuotesStore,
   listQuotesByJob,
 } from "./quotesStore.mjs";
-import { AUDIT_ACTIONS, appendAuditLog, initializeAuditStore, listAuditLogsForEntity } from "./auditStore.mjs";
+import { AUDIT_ACTIONS, initializeAuditStore, listAuditLogsForEntity } from "./auditStore.mjs";
 import {
   createGenerationCostRun,
   initializeGenerationCostStore,
 } from "./generationCostStore.mjs";
+import {
+  enqueueImagenJob,
+  getImagenQueueDiagnostics,
+  getImagenQueueSweeperConfig,
+  getImagenJobByRequestId,
+  getImagenRuntimeState,
+  getImagenQueueRetryConfig,
+  getImageQueueMode,
+  initializeImagenQueueStore,
+} from "./imagenQueueStore.mjs";
+import { applyGenerationResultSideEffects } from "./imagenRuntimeHooks.mjs";
+import { deriveQueueHealthStatus } from "./queueHealthStatus.mjs";
+import { deriveQueueHealthSummary } from "./queueHealthSummary.mjs";
+import { renderQueueMetrics } from "./queueMetrics.mjs";
+import { deriveQueueLatency } from "./queueLatency.mjs";
+import { deriveQueueAlertPolicy } from "./queueAlertPolicy.mjs";
+import {
+  getGenerationTelemetryDiagnostics,
+  recordGenerationTelemetry,
+} from "./generationTelemetryStore.mjs";
+import { deriveGenerationHealthSummary } from "./generationHealthSummary.mjs";
+import { renderGenerationMetrics } from "./generationMetrics.mjs";
+import { getStudioPresetById, listStudioPresets } from "./studioPresets.mjs";
 
 const port = Number(process.env.PORT || 8787);
 const corsOrigin = process.env.CORS_ORIGIN || "*";
@@ -63,6 +90,17 @@ function writeJson(res, statusCode, body) {
     "Cache-Control": "no-store",
   });
   res.end(JSON.stringify(body));
+}
+
+function writeText(res, statusCode, body, contentType = "text/plain; version=0.0.4; charset=utf-8") {
+  res.writeHead(statusCode, {
+    "Content-Type": contentType,
+    "Access-Control-Allow-Origin": corsOrigin,
+    "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
+    "Access-Control-Allow-Headers": "Content-Type, Authorization",
+    "Cache-Control": "no-store",
+  });
+  res.end(body);
 }
 
 function readJsonBody(req) {
@@ -116,6 +154,62 @@ function toErrorResponse(error, requestId) {
       },
     },
   };
+}
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function parsePositiveInt(value, fallback) {
+  const number = Number(value);
+  if (!Number.isFinite(number)) return fallback;
+  return Math.max(1, Math.floor(number));
+}
+
+function readQueuePolicyThresholdConfig() {
+  return {
+    queue_wait_warn_ms: parsePositiveInt(process.env.IMAGE_QUEUE_WAIT_WARN_MS, 10000),
+    queue_wait_critical_ms: parsePositiveInt(process.env.IMAGE_QUEUE_WAIT_CRITICAL_MS, 30000),
+    processing_warn_ms: parsePositiveInt(process.env.IMAGE_QUEUE_PROCESSING_WARN_MS, 30000),
+    processing_critical_ms: parsePositiveInt(
+      process.env.IMAGE_QUEUE_PROCESSING_CRITICAL_MS,
+      90000
+    ),
+    end_to_end_warn_ms: parsePositiveInt(process.env.IMAGE_QUEUE_END_TO_END_WARN_MS, 45000),
+    end_to_end_critical_ms: parsePositiveInt(
+      process.env.IMAGE_QUEUE_END_TO_END_CRITICAL_MS,
+      120000
+    ),
+  };
+}
+
+function recordGenerationTelemetrySafe(requestId, values) {
+  try {
+    recordGenerationTelemetry(requestId, values);
+  } catch (_) {
+    // non-blocking telemetry write
+  }
+}
+
+async function waitForQueuedGeneration(requestId, timeoutMs) {
+  const pollMs = Math.max(100, Number(process.env.IMAGE_QUEUE_POLL_MS || 200));
+  const startedAt = Date.now();
+  while (Date.now() - startedAt < timeoutMs) {
+    const job = getImagenJobByRequestId(requestId);
+    if (job?.status === "succeeded") {
+      return { ok: true, result: job.result, queueJobId: job.id };
+    }
+    if (job?.status === "failed") {
+      const error = new Error(job?.error?.message || "Generation failed");
+      error.status = Number(job?.error?.status || 500);
+      error.body = job?.error?.details || null;
+      throw error;
+    }
+    await sleep(pollMs);
+  }
+  const error = new Error(`Queued generation timed out after ${timeoutMs}ms`);
+  error.status = 504;
+  throw error;
 }
 
 const server = http.createServer(async (req, res) => {
@@ -181,6 +275,232 @@ const server = http.createServer(async (req, res) => {
       "Cache-Control": "public, max-age=31536000, immutable",
     });
     res.end(asset.bytes);
+    return;
+  }
+
+  if (pathname === "/api/imagen/providers" && req.method === "GET") {
+    const info = getImagenProviderRuntimeInfo();
+    writeJson(res, 200, {
+      ...info,
+      queue_mode: getImageQueueMode(),
+    });
+    return;
+  }
+
+  if (pathname === "/api/studio/presets" && req.method === "GET") {
+    try {
+      const items = listStudioPresets();
+      writeJson(res, 200, { items });
+    } catch (error) {
+      writeJson(res, 500, {
+        error: {
+          code: "STUDIO_PRESETS_LIST_FAILED",
+          message: error.message || "Studio presets list failed",
+        },
+      });
+    }
+    return;
+  }
+
+  if (pathname.startsWith("/api/studio/presets/") && req.method === "GET") {
+    try {
+      const id = decodeURIComponent(pathname.replace("/api/studio/presets/", ""));
+      if (!id) {
+        writeJson(res, 404, {
+          error: {
+            code: "NOT_FOUND",
+            message: "Preset not found",
+          },
+        });
+        return;
+      }
+      const item = getStudioPresetById(id);
+      if (!item) {
+        writeJson(res, 404, {
+          error: {
+            code: "NOT_FOUND",
+            message: "Preset not found",
+          },
+        });
+        return;
+      }
+      writeJson(res, 200, { item });
+    } catch (error) {
+      writeJson(res, 500, {
+        error: {
+          code: "STUDIO_PRESET_DETAIL_FAILED",
+          message: error.message || "Studio preset detail failed",
+        },
+      });
+    }
+    return;
+  }
+
+  if (pathname === "/api/health/queue" && req.method === "GET") {
+    try {
+      const diagnostics = getImagenQueueDiagnostics();
+      const sweeperConfig = getImagenQueueSweeperConfig();
+      const retryConfig = getImagenQueueRetryConfig();
+      const policyThresholdConfig = readQueuePolicyThresholdConfig();
+      const runtime = diagnostics.runtime_state || getImagenRuntimeState();
+      const lastSeenAt = runtime.worker_last_seen_at?.value || null;
+      const lastActivityAt = runtime.worker_last_activity_at?.value || null;
+      const lastSweepAt = runtime.worker_last_sweep_at?.value || null;
+      const lastSeenMs = lastSeenAt ? Date.parse(lastSeenAt) : NaN;
+      const running =
+        Number.isFinite(lastSeenMs) &&
+        Date.now() - lastSeenMs <= sweeperConfig.workerHeartbeatTtlMs;
+      const healthSnapshot = {
+        queue_mode: diagnostics.queue_mode,
+        worker: {
+          observable: true,
+          running: Boolean(running),
+          worker_id: runtime.worker_id?.value || null,
+          last_seen_at: lastSeenAt,
+          last_activity_at: lastActivityAt,
+          last_sweep_at: lastSweepAt,
+          sweeper_enabled: sweeperConfig.enabled,
+        },
+        counts: diagnostics.counts,
+        config: {
+          stale_ms: sweeperConfig.staleMs,
+          sweep_interval_ms: sweeperConfig.sweepIntervalMs,
+          worker_heartbeat_ttl_ms: sweeperConfig.workerHeartbeatTtlMs,
+          retry_max_attempts: retryConfig.maxAttempts,
+          retry_backoff_base_ms: retryConfig.baseMs,
+          retry_backoff_max_ms: retryConfig.maxMs,
+          ...policyThresholdConfig,
+        },
+        latency: deriveQueueLatency(diagnostics),
+      };
+      const derived = deriveQueueHealthStatus(healthSnapshot);
+      const derivedSummary = deriveQueueHealthSummary(healthSnapshot, Date.now());
+      const derivedPolicy = deriveQueueAlertPolicy({
+        ...healthSnapshot,
+        summary: derivedSummary.summary,
+        thresholds: derivedSummary.thresholds,
+      });
+      writeJson(res, 200, {
+        ...healthSnapshot,
+        status: derived.status,
+        status_reasons: derived.status_reasons,
+        summary: derivedSummary.summary,
+        timing: derivedSummary.timing,
+        thresholds: derivedSummary.thresholds,
+        latency: healthSnapshot.latency,
+        policy: derivedPolicy,
+      });
+    } catch (error) {
+      writeJson(res, 500, {
+        error: {
+          code: "QUEUE_HEALTH_FAILED",
+          message: error.message || "Queue health failed",
+        },
+      });
+    }
+    return;
+  }
+
+  if (pathname === "/api/metrics/queue" && req.method === "GET") {
+    try {
+      const diagnostics = getImagenQueueDiagnostics();
+      const sweeperConfig = getImagenQueueSweeperConfig();
+      const retryConfig = getImagenQueueRetryConfig();
+      const policyThresholdConfig = readQueuePolicyThresholdConfig();
+      const runtime = diagnostics.runtime_state || getImagenRuntimeState();
+      const lastSeenAt = runtime.worker_last_seen_at?.value || null;
+      const lastActivityAt = runtime.worker_last_activity_at?.value || null;
+      const lastSweepAt = runtime.worker_last_sweep_at?.value || null;
+      const lastSeenMs = lastSeenAt ? Date.parse(lastSeenAt) : NaN;
+      const running =
+        Number.isFinite(lastSeenMs) &&
+        Date.now() - lastSeenMs <= sweeperConfig.workerHeartbeatTtlMs;
+      const snapshot = {
+        queue_mode: diagnostics.queue_mode,
+        worker: {
+          observable: true,
+          running: Boolean(running),
+          worker_id: runtime.worker_id?.value || null,
+          last_seen_at: lastSeenAt,
+          last_activity_at: lastActivityAt,
+          last_sweep_at: lastSweepAt,
+          sweeper_enabled: sweeperConfig.enabled,
+        },
+        counts: diagnostics.counts,
+        config: {
+          stale_ms: sweeperConfig.staleMs,
+          sweep_interval_ms: sweeperConfig.sweepIntervalMs,
+          worker_heartbeat_ttl_ms: sweeperConfig.workerHeartbeatTtlMs,
+          retry_max_attempts: retryConfig.maxAttempts,
+          retry_backoff_base_ms: retryConfig.baseMs,
+          retry_backoff_max_ms: retryConfig.maxMs,
+          ...policyThresholdConfig,
+        },
+        latency: deriveQueueLatency(diagnostics),
+      };
+      const derivedStatus = deriveQueueHealthStatus(snapshot);
+      const derivedSummary = deriveQueueHealthSummary(snapshot, Date.now());
+      const derivedPolicy = deriveQueueAlertPolicy({
+        ...snapshot,
+        summary: derivedSummary.summary,
+        thresholds: derivedSummary.thresholds,
+      });
+      const metricsText = renderQueueMetrics(
+        {
+          ...snapshot,
+          status: derivedStatus.status,
+          status_reasons: derivedStatus.status_reasons,
+          summary: derivedSummary.summary,
+          timing: derivedSummary.timing,
+          thresholds: derivedSummary.thresholds,
+          latency: snapshot.latency,
+          policy: derivedPolicy,
+        },
+        Date.now()
+      );
+      writeText(res, 200, metricsText);
+    } catch (error) {
+      writeText(
+        res,
+        500,
+        `# queue metrics scrape failed\n# ${String(error?.message || "unknown error")}\n`
+      );
+    }
+    return;
+  }
+
+  if (pathname === "/api/health/generation" && req.method === "GET") {
+    try {
+      const diagnostics = getGenerationTelemetryDiagnostics();
+      const summary = deriveGenerationHealthSummary(diagnostics);
+      writeJson(res, 200, {
+        queue_mode: getImageQueueMode(),
+        ...summary,
+      });
+    } catch (error) {
+      writeJson(res, 500, {
+        error: {
+          code: "GENERATION_HEALTH_FAILED",
+          message: error.message || "Generation health failed",
+        },
+      });
+    }
+    return;
+  }
+
+  if (pathname === "/api/metrics/generation" && req.method === "GET") {
+    try {
+      const diagnostics = getGenerationTelemetryDiagnostics();
+      const summary = deriveGenerationHealthSummary(diagnostics);
+      const text = renderGenerationMetrics(summary, Date.now());
+      writeText(res, 200, text);
+    } catch (error) {
+      writeText(
+        res,
+        500,
+        `# generation metrics scrape failed\n# ${String(error?.message || "unknown error")}\n`
+      );
+    }
     return;
   }
 
@@ -1065,58 +1385,72 @@ const server = http.createServer(async (req, res) => {
 
   const requestId = randomUUID();
   const timeoutMs = getTimeoutMs();
-  const controller = new AbortController();
   const startedAt = Date.now();
-  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+  const queueMode = getImageQueueMode();
+  recordGenerationTelemetrySafe(requestId, {
+    queue_mode: queueMode,
+    status: "received",
+    request_received_at: new Date(startedAt).toISOString(),
+  });
 
   try {
     const body = await readJsonBody(req);
     const payload = body?.payload;
-    const result = await generateViaVertexImagen({
-      payload,
-      requestId,
-      signal: controller.signal,
-    });
-
-    const jobId = typeof payload?.job_id === "string" ? payload.job_id.trim() : "";
-    if (jobId) {
+    let result;
+    let queueJobId = null;
+    if (queueMode === "worker") {
+      const queued = enqueueImagenJob({
+        requestId,
+        payload,
+      });
+      queueJobId = queued?.id || null;
+      recordGenerationTelemetrySafe(requestId, {
+        queue_mode: queueMode,
+        status: "queued",
+        queued_at: new Date().toISOString(),
+      });
+      const waitTimeoutMs = Math.max(
+        1000,
+        Number(process.env.IMAGE_QUEUE_WAIT_TIMEOUT_MS || timeoutMs)
+      );
+      const queuedResult = await waitForQueuedGeneration(requestId, waitTimeoutMs);
+      result = queuedResult.result;
+      queueJobId = queuedResult.queueJobId || queueJobId;
+    } else {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
       try {
-        appendAuditLog({
-          entity_type: "job",
-          entity_id: jobId,
-          action_type:
-            Number(payload?.generation?.rerun_count || 0) > 0
-              ? AUDIT_ACTIONS.RERUN_TRIGGERED
-              : AUDIT_ACTIONS.PROMPT_GENERATED,
-          actor: "system",
-          metadata: {
-            model: payload?.generation?.model || result?.model || "imagen-3.0-generate-002",
-            variants: Number(payload?.generation?.variants || 1),
-          },
+        recordGenerationTelemetrySafe(requestId, {
+          queue_mode: queueMode,
+          status: "processing",
+          provider_started_at: new Date().toISOString(),
         });
-        const costRun = createGenerationCostRun({
-          job_id: jobId,
-          provider: result?.meta?.provider || "vertex-imagen",
-          model: result?.model || payload?.generation?.model || "imagen-3.0-generate-002",
-          number_of_outputs: Array.isArray(result?.assets)
-            ? result.assets.length
-            : Array.isArray(result?.images)
-            ? result.images.length
-            : Number(payload?.generation?.variants || 1),
-          rerun_count: Number(payload?.generation?.rerun_count || 0),
+        result = await generateViaVertexImagen({
+          payload,
+          requestId,
+          signal: controller.signal,
         });
-        updateJobSlaMilestones(jobId, {
-          first_output_at: costRun?.created_at || new Date().toISOString(),
-          actor: "system",
-          audit_action_type: AUDIT_ACTIONS.FIRST_OUTPUT_CREATED,
+        recordGenerationTelemetrySafe(requestId, {
+          provider_finished_at: new Date().toISOString(),
+          status: "post_processing",
+          post_processing_started_at: new Date().toISOString(),
         });
-      } catch (_) {
-        // cost tracking should not block generation response
+        applyGenerationResultSideEffects({ payload, result });
+        const completedAt = new Date().toISOString();
+        recordGenerationTelemetrySafe(requestId, {
+          post_processing_finished_at: completedAt,
+          completed_at: completedAt,
+          status: "succeeded",
+        });
+      } finally {
+        clearTimeout(timeoutId);
       }
     }
 
     writeJson(res, 200, {
       ...result,
+      queue_mode: queueMode,
+      ...(queueJobId ? { queue_job_id: queueJobId } : {}),
       latencyMs: Date.now() - startedAt,
     });
   } catch (error) {
@@ -1125,9 +1459,13 @@ const server = http.createServer(async (req, res) => {
       error.message = `Imagen request timed out after ${timeoutMs}ms`;
     }
     const formatted = toErrorResponse(error, requestId);
+    recordGenerationTelemetrySafe(requestId, {
+      queue_mode: queueMode,
+      status: "failed",
+      error_code: formatted?.body?.error?.code || "REQUEST_FAILED",
+      failed_at: new Date().toISOString(),
+    });
     writeJson(res, formatted.status, formatted.body);
-  } finally {
-    clearTimeout(timeoutId);
   }
 });
 
@@ -1137,6 +1475,7 @@ async function startServer() {
   await initializeQuotesStore();
   await initializeAuditStore();
   await initializeGenerationCostStore();
+  await initializeImagenQueueStore();
   server.listen(port, () => {
     console.log(`[muse-studio-api] listening on http://localhost:${port}`);
   });

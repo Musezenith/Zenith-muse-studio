@@ -46,9 +46,10 @@ export async function generateImagesWithImagen(payload, options = {}) {
   const images = toLegacyImages(assets);
 
   return {
-    provider: "vertex-imagen",
+    provider: body.provider || body.meta?.provider || payload.generation.provider || "unknown",
     model: body.model || payload.generation.model,
     requestId: body.requestId || null,
+    generationTimeMs: Number(body.generation_time_ms || body.latencyMs || 0),
     assets,
     images,
     raw: body,

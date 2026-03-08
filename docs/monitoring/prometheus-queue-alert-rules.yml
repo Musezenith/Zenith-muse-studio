@@ -1,0 +1,69 @@
+groups:
+  - name: muse_studio_queue_alerts
+    interval: 30s
+    rules:
+      - alert: MuseQueueAlertCritical
+        expr: imagen_queue_alert_state >= 2
+        for: 2m
+        labels:
+          severity: critical
+          service: muse-studio
+          subsystem: imagen-queue
+        annotations:
+          summary: "Imagen queue critical alert state"
+          description: "Queue alert state is critical ({{ $value }}). Check /api/health/queue and worker logs."
+
+      - alert: MuseQueueAlertWarn
+        expr: imagen_queue_alert_state == 1
+        for: 10m
+        labels:
+          severity: warning
+          service: muse-studio
+          subsystem: imagen-queue
+        annotations:
+          summary: "Imagen queue warning alert state"
+          description: "Queue alert state is warn for at least 10 minutes."
+
+      - alert: MuseQueueWorkerDownWithBacklog
+        expr: imagen_worker_running == 0 and imagen_queue_has_backlog == 1
+        for: 2m
+        labels:
+          severity: critical
+          service: muse-studio
+          subsystem: imagen-queue
+        annotations:
+          summary: "Worker down while queue has backlog"
+          description: "Queue backlog exists but worker is not live."
+
+      - alert: MuseQueueStaleWork
+        expr: imagen_queue_has_stale_work == 1
+        for: 2m
+        labels:
+          severity: critical
+          service: muse-studio
+          subsystem: imagen-queue
+        annotations:
+          summary: "Stale processing work detected"
+          description: "Queue reports stale processing work. Sweeper recovery may be failing or overloaded."
+
+      - alert: MuseQueueLatencyCritical
+        expr: imagen_queue_end_to_end_avg_ms > imagen_queue_threshold_end_to_end_critical_ms
+        for: 5m
+        labels:
+          severity: critical
+          service: muse-studio
+          subsystem: imagen-queue
+        annotations:
+          summary: "Queue end-to-end latency above critical threshold"
+          description: "Average end-to-end latency exceeded configured critical threshold."
+
+      - alert: MuseQueueLatencyWarn
+        expr: imagen_queue_end_to_end_avg_ms > imagen_queue_threshold_end_to_end_warn_ms
+        for: 10m
+        labels:
+          severity: warning
+          service: muse-studio
+          subsystem: imagen-queue
+        annotations:
+          summary: "Queue end-to-end latency above warning threshold"
+          description: "Average end-to-end latency exceeded warning threshold."
