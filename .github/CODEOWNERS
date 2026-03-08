@@ -1,0 +1,12 @@
+# CODEOWNERS
+# TODO: Replace @Musezenith with the real GitHub username/team for ownership enforcement.
+
+# Default owner for the whole repository
+* @Musezenith
+
+# Area ownership (can be split to teams later)
+/src/ @Musezenith
+/server/ @Musezenith
+/scripts/ @Musezenith
+/docs/ @Musezenith
+/.github/ @Musezenith
