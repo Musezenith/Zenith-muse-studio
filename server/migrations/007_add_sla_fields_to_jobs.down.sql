@@ -1,0 +1,1 @@
+-- SQLite column drops intentionally omitted for compatibility.
