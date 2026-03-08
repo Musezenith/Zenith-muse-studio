@@ -1,0 +1,44 @@
+{
+  "name": "muse-studio",
+  "private": true,
+  "version": "0.1.0",
+  "scripts": {
+    "dev": "vite",
+    "dev:api": "node server/index.mjs",
+    "build": "vite build",
+    "test:integration": "node scripts/test-generate-endpoint.mjs",
+    "test:documents": "node scripts/test-documents.mjs",
+    "test:docs-hub": "node scripts/test-docs-hub-filters.mjs",
+    "test:doc-detail": "node scripts/test-doc-detail-utils.mjs",
+    "test:intake-validation": "node scripts/test-intake-validation.mjs",
+    "test:jobs-intake": "node scripts/test-jobs-intake-endpoint.mjs",
+    "test:quotes": "node scripts/test-quotes-endpoint.mjs",
+    "test:jobs-overview": "node scripts/test-jobs-overview-endpoint.mjs",
+    "test:audit-log": "node scripts/test-audit-log-endpoint.mjs",
+    "test:pilot-mode": "node scripts/test-pilot-mode-endpoint.mjs",
+    "test:generation-cost": "node scripts/test-generation-cost-endpoint.mjs",
+    "test:sla-logic": "node scripts/test-sla-logic.mjs",
+    "test:sla-endpoint": "node scripts/test-sla-endpoint.mjs",
+    "test:case-study": "node scripts/test-case-study-endpoint.mjs",
+    "test:testimonial": "node scripts/test-testimonial-endpoint.mjs",
+    "test:proof-pack": "node scripts/test-proof-pack-endpoint.mjs",
+    "documents:migrate": "node scripts/documents-migrate.mjs",
+    "documents:rollback": "node scripts/documents-rollback.mjs",
+    "documents:seed": "node scripts/documents-seed.mjs"
+  },
+  "dependencies": {
+    "@aws-sdk/client-s3": "^3.851.0",
+    "@aws-sdk/s3-request-presigner": "^3.851.0",
+    "google-auth-library": "^9.15.1",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-router-dom": "^7.13.1"
+  },
+  "devDependencies": {
+    "@types/react": "^18.3.3",
+    "@types/react-dom": "^18.3.0",
+    "@vitejs/plugin-react": "^4.7.0",
+    "typescript": "^5.6.3",
+    "vite": "^5.4.10"
+  }
+}
