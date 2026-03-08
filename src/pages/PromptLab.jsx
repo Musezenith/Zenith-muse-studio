@@ -7,6 +7,7 @@ import { saveArchiveEntry } from "../lib/archiveStore";
 import { RUN_STATE } from "../lib/runState";
 import { useToast } from "../components/ToastProvider";
 import { getImageAssetPreviewUrl, normalizeImageAssets } from "../lib/assetSchema";
+import BilingualText from "../components/BilingualText";
 
 function scorePromptQuality({ brief, result }) {
   const text = `${brief} ${result.positivePrompt} ${result.negativePrompt}`.toLowerCase();
@@ -374,14 +375,22 @@ export default function PromptLab() {
   return (
     <div className="mx-auto w-full max-w-6xl min-w-0 space-y-6 overflow-x-hidden">
       <div className="min-w-0">
-        <h1 className="text-4xl font-semibold tracking-tight text-white">Prompt Lab</h1>
-        <p className="mt-2 text-sm text-neutral-400">
-          Generate production-ready fashion editorial prompt package
-        </p>
+        <BilingualText
+          as="h1"
+          title="Prompt Lab"
+          subtitle="Tạo prompt package sẵn sàng cho sản xuất editorial thời trang."
+          titleClassName="text-4xl font-semibold tracking-tight text-white"
+          subtitleClassName="text-sm text-neutral-400"
+        />
       </div>
 
       <Card>
         <div className="space-y-4 min-w-0">
+          <BilingualText
+            title="Creative Brief"
+            subtitle="Mô tả mục tiêu, mood, ràng buộc để hệ thống dựng prompt."
+            titleClassName="text-xs uppercase tracking-[0.2em] text-neutral-500"
+          />
           <textarea
             value={brief}
             onChange={(e) => setBrief(e.target.value)}
@@ -514,13 +523,17 @@ export default function PromptLab() {
                 <div className="mb-2 text-xs uppercase tracking-[0.2em] text-neutral-500">
                   Preset + rationale
                 </div>
+                <p className="mb-3 text-xs text-neutral-500">Preset và lý do chọn preset</p>
                 <div className="text-lg font-medium text-white">{output.preset}</div>
                 <p className="mt-2 whitespace-pre-wrap break-words [overflow-wrap:anywhere] text-sm leading-6 text-neutral-300">
                   {output.rationale}
                 </p>
                 <div className="mb-3 mt-5 flex flex-wrap items-center justify-between gap-3">
-                  <div className="text-xs uppercase tracking-[0.2em] text-neutral-500">
-                    Positive prompt
+                  <div>
+                    <div className="text-xs uppercase tracking-[0.2em] text-neutral-500">
+                      Positive prompt
+                    </div>
+                    <p className="text-xs text-neutral-500">Prompt dương để tạo ảnh</p>
                   </div>
                   <CopyButton
                     copied={copiedField === "positive"}
@@ -534,8 +547,11 @@ export default function PromptLab() {
             {activeTab === "negative" && (
               <section className="min-w-0">
                 <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
-                  <div className="text-xs uppercase tracking-[0.2em] text-neutral-500">
-                    Negative prompt
+                  <div>
+                    <div className="text-xs uppercase tracking-[0.2em] text-neutral-500">
+                      Negative prompt
+                    </div>
+                    <p className="text-xs text-neutral-500">Prompt âm để chặn lỗi thường gặp</p>
                   </div>
                   <CopyButton
                     copied={copiedField === "negative"}
@@ -549,8 +565,11 @@ export default function PromptLab() {
             {activeTab === "params" && (
               <section className="min-w-0">
                 <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
-                  <div className="text-xs uppercase tracking-[0.2em] text-neutral-500">
-                    Params
+                  <div>
+                    <div className="text-xs uppercase tracking-[0.2em] text-neutral-500">
+                      Params
+                    </div>
+                    <p className="text-xs text-neutral-500">Thông số sinh ảnh (steps, cfg, seed...)</p>
                   </div>
                   <CopyButton
                     copied={copiedField === "params"}
@@ -573,6 +592,7 @@ export default function PromptLab() {
                 <div className="mb-3 text-xs uppercase tracking-[0.2em] text-neutral-500">
                   QC checklist
                 </div>
+                <p className="mb-3 text-xs text-neutral-500">Danh sách kiểm tra chất lượng đầu ra</p>
                 <div className="min-w-0 rounded-xl border border-neutral-800 bg-black p-4">
                   <ul className="list-disc space-y-2 pl-5 text-sm text-neutral-100">
                     {output.qcChecklist.map((item) => (
@@ -588,8 +608,11 @@ export default function PromptLab() {
             {activeTab === "json" && (
               <section className="min-w-0">
                 <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
-                  <div className="text-xs uppercase tracking-[0.2em] text-neutral-500">
-                    JSON export payload
+                  <div>
+                    <div className="text-xs uppercase tracking-[0.2em] text-neutral-500">
+                      JSON export payload
+                    </div>
+                    <p className="text-xs text-neutral-500">Payload chuẩn để lưu trữ hoặc tích hợp</p>
                   </div>
                   <CopyButton
                     copied={copiedField === "json"}
@@ -619,6 +642,7 @@ export default function PromptLab() {
                     <div className="text-xs uppercase tracking-[0.2em] text-neutral-500">
                       Prompt Score Panel
                     </div>
+                    <p className="mt-1 text-xs text-neutral-500">Bảng điểm chất lượng prompt</p>
                     <div className="mt-2 text-2xl font-semibold text-white">
                       Overall Score: {output.scores.overall}/100
                     </div>

@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { getJobsOverview } from "../lib/jobsClient";
+import BilingualText from "../components/BilingualText";
 
 const STAGES = [
   "new brief",
@@ -57,12 +58,13 @@ export default function Dashboard() {
   return (
     <div className="mx-auto w-full max-w-6xl min-w-0 space-y-6 overflow-x-hidden">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="text-3xl font-semibold text-white">Operations Dashboard</h1>
-          <p className="mt-1 text-sm text-neutral-400">
-            Studio workload and recent jobs overview.
-          </p>
-        </div>
+        <BilingualText
+          as="h1"
+          title="Operations Dashboard"
+          subtitle="Bảng điều hành vận hành và khối lượng công việc gần đây."
+          titleClassName="text-3xl font-semibold text-white"
+          subtitleClassName="text-sm text-neutral-400"
+        />
         <Link
           to="/intake/new"
           className="rounded-xl border border-neutral-700 bg-neutral-900 px-4 py-2 text-sm text-neutral-200 hover:bg-neutral-800"
@@ -93,7 +95,11 @@ export default function Dashboard() {
 
       <section className="grid gap-3 sm:grid-cols-3">
         <article className="rounded-2xl border border-neutral-800 bg-neutral-950/70 p-4">
-          <div className="text-xs uppercase tracking-[0.2em] text-neutral-500">Weekly Cost</div>
+          <BilingualText
+            title="Weekly Cost"
+            subtitle="Chi phí 7 ngày gần nhất"
+            titleClassName="text-xs uppercase tracking-[0.2em] text-neutral-500"
+          />
           <div className="mt-2 text-2xl font-semibold text-white">
             ${Number(costSummary?.weekly?.total_cost || 0).toFixed(2)}
           </div>
@@ -103,7 +109,11 @@ export default function Dashboard() {
           </div>
         </article>
         <article className="rounded-2xl border border-neutral-800 bg-neutral-950/70 p-4">
-          <div className="text-xs uppercase tracking-[0.2em] text-neutral-500">Monthly Cost</div>
+          <BilingualText
+            title="Monthly Cost"
+            subtitle="Chi phí 30 ngày gần nhất"
+            titleClassName="text-xs uppercase tracking-[0.2em] text-neutral-500"
+          />
           <div className="mt-2 text-2xl font-semibold text-white">
             ${Number(costSummary?.monthly?.total_cost || 0).toFixed(2)}
           </div>
@@ -113,7 +123,11 @@ export default function Dashboard() {
           </div>
         </article>
         <article className="rounded-2xl border border-neutral-800 bg-neutral-950/70 p-4">
-          <div className="text-xs uppercase tracking-[0.2em] text-neutral-500">All-Time Cost</div>
+          <BilingualText
+            title="All-Time Cost"
+            subtitle="Tổng chi phí tích lũy"
+            titleClassName="text-xs uppercase tracking-[0.2em] text-neutral-500"
+          />
           <div className="mt-2 text-2xl font-semibold text-white">
             ${Number(costSummary?.total?.total_cost || 0).toFixed(2)}
           </div>
@@ -125,7 +139,12 @@ export default function Dashboard() {
 
       <section className="rounded-2xl border border-neutral-800 bg-neutral-950/70 p-4">
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <h2 className="text-lg font-semibold text-white">Recent Jobs</h2>
+          <BilingualText
+            as="h2"
+            title="Recent Jobs"
+            subtitle="Công việc mới cập nhật"
+            titleClassName="text-lg font-semibold text-white"
+          />
           <select
             value={slaFilter}
             onChange={(event) => setSlaFilter(event.target.value)}

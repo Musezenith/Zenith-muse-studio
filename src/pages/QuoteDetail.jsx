@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { getQuote } from "../lib/quotesClient";
+import BilingualText from "../components/BilingualText";
 
 function formatDate(value) {
   if (!value) return "Unknown";
@@ -95,23 +96,35 @@ export default function QuoteDetail() {
             </span>
           )}
         </div>
-        <h1 className="mt-3 text-3xl font-semibold text-white">Quote ${item.price}</h1>
+        <BilingualText
+          as="h1"
+          title={`Quote $${item.price}`}
+          subtitle="Chi tiết báo giá đã lưu"
+          titleClassName="mt-3 text-3xl font-semibold text-white"
+          subtitleClassName="text-sm text-neutral-400"
+        />
         <p className="mt-1 text-sm text-neutral-400">Package: {item.package_type}</p>
         <p className="mt-1 text-xs text-neutral-500">
           Created: {formatDate(item.created_at)} | Updated: {formatDate(item.updated_at)}
         </p>
 
         <section className="mt-5 grid gap-4 md:grid-cols-2">
-          <Detail label="Scope Summary" value={item.scope_summary} className="md:col-span-2" />
-          <Detail label="Delivery Timeline" value={item.delivery_timeline} />
-          <Detail label="Usage Scope" value={item.usage_scope} />
-          <Detail label="Final Images" value={String(item.number_of_final_images)} />
-          <Detail label="Directions" value={String(item.number_of_directions)} />
-          <Detail label="Revision Rounds" value={String(item.revision_rounds)} />
-          <Detail label="Revision Limit" value={String(item.revision_limit)} />
-          <Detail label="Deadline Urgency" value={item.deadline_urgency} />
+          <Detail
+            label="Scope Summary"
+            subtitle="Tóm tắt phạm vi thực hiện"
+            value={item.scope_summary}
+            className="md:col-span-2"
+          />
+          <Detail label="Delivery Timeline" subtitle="Mốc thời gian bàn giao" value={item.delivery_timeline} />
+          <Detail label="Usage Scope" subtitle="Phạm vi sử dụng" value={item.usage_scope} />
+          <Detail label="Final Images" subtitle="Số ảnh bàn giao" value={String(item.number_of_final_images)} />
+          <Detail label="Directions" subtitle="Số hướng sáng tạo" value={String(item.number_of_directions)} />
+          <Detail label="Revision Rounds" subtitle="Số vòng chỉnh sửa" value={String(item.revision_rounds)} />
+          <Detail label="Revision Limit" subtitle="Giới hạn chỉnh sửa" value={String(item.revision_limit)} />
+          <Detail label="Deadline Urgency" subtitle="Mức độ gấp" value={item.deadline_urgency} />
           <Detail
             label="Pilot Terms Summary"
+            subtitle="Điều khoản áp dụng cho dự án pilot"
             value={
               item.is_pilot
                 ? "Introductory pilot scope with reduced revision coverage. Usage is limited to internal/digital until expanded."
@@ -119,17 +132,23 @@ export default function QuoteDetail() {
             }
             className="md:col-span-2"
           />
-          <Detail label="Assumptions" value={item.assumptions} className="md:col-span-2" />
+          <Detail
+            label="Assumptions"
+            subtitle="Giả định và điều kiện đi kèm"
+            value={item.assumptions}
+            className="md:col-span-2"
+          />
         </section>
       </article>
     </div>
   );
 }
 
-function Detail({ label, value, className = "" }) {
+function Detail({ label, subtitle = "", value, className = "" }) {
   return (
     <div className={className}>
       <div className="text-xs uppercase tracking-[0.2em] text-neutral-500">{label}</div>
+      {subtitle ? <div className="mt-1 text-xs text-neutral-500">{subtitle}</div> : null}
       <div className="mt-1 rounded-lg border border-neutral-800 bg-black p-3 text-sm text-neutral-200 whitespace-pre-wrap break-words [overflow-wrap:anywhere]">
         {value}
       </div>

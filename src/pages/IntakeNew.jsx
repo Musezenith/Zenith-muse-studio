@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { useToast } from "../components/ToastProvider";
 import { createJob } from "../lib/jobsClient";
 import { validateIntakeForm } from "../lib/intakeValidation";
+import BilingualText from "../components/BilingualText";
 
 function readAsDataUri(file) {
   return new Promise((resolve, reject) => {
@@ -93,12 +94,13 @@ export default function IntakeNew() {
 
   return (
     <div className="mx-auto w-full max-w-4xl min-w-0 space-y-6 overflow-x-hidden">
-      <div>
-        <h1 className="text-3xl font-semibold text-white">New Client Intake</h1>
-        <p className="mt-1 text-sm text-neutral-400">
-          Standardized intake form to create a new production job.
-        </p>
-      </div>
+      <BilingualText
+        as="h1"
+        title="New Client Intake"
+        subtitle="Biểu mẫu intake chuẩn hóa để tạo job sản xuất mới."
+        titleClassName="text-3xl font-semibold text-white"
+        subtitleClassName="text-sm text-neutral-400"
+      />
 
       <form onSubmit={handleSubmit} className="rounded-2xl border border-neutral-800 bg-neutral-950/70 p-4">
         <div className="grid gap-4 md:grid-cols-2">
@@ -152,24 +154,28 @@ export default function IntakeNew() {
           </div>
           <Field
             label="Client Name"
+            subtitle="Tên khách hàng"
             value={form.client_name}
             onChange={(value) => handleChange("client_name", value)}
             error={errors.client_name}
           />
           <Field
             label="Brand"
+            subtitle="Tên thương hiệu"
             value={form.brand}
             onChange={(value) => handleChange("brand", value)}
             error={errors.brand}
           />
           <Field
             label="Contact Info"
+            subtitle="Thông tin liên hệ"
             value={form.contact_info}
             onChange={(value) => handleChange("contact_info", value)}
             error={errors.contact_info}
           />
           <Field
             label="Deadline"
+            subtitle="Ngày bàn giao dự kiến"
             type="date"
             value={form.deadline}
             onChange={(value) => handleChange("deadline", value)}
@@ -177,6 +183,7 @@ export default function IntakeNew() {
           />
           <TextArea
             label="Use Case"
+            subtitle="Mục tiêu sử dụng hình ảnh"
             value={form.use_case}
             onChange={(value) => handleChange("use_case", value)}
             error={errors.use_case}
@@ -184,6 +191,7 @@ export default function IntakeNew() {
           />
           <TextArea
             label="Mood / Style"
+            subtitle="Mood và định hướng hình ảnh"
             value={form.mood_style}
             onChange={(value) => handleChange("mood_style", value)}
             error={errors.mood_style}
@@ -191,6 +199,7 @@ export default function IntakeNew() {
           />
           <TextArea
             label="Deliverables"
+            subtitle="Đầu ra cần bàn giao"
             value={form.deliverables}
             onChange={(value) => handleChange("deliverables", value)}
             error={errors.deliverables}
@@ -198,6 +207,7 @@ export default function IntakeNew() {
           />
           <TextArea
             label="References (links)"
+            subtitle="Link tham chiếu"
             value={form.references}
             onChange={(value) => handleChange("references", value)}
             error={errors.references}
@@ -205,6 +215,7 @@ export default function IntakeNew() {
           />
           <TextArea
             label="Notes"
+            subtitle="Ghi chú bổ sung"
             value={form.notes}
             onChange={(value) => handleChange("notes", value)}
             error={errors.notes}
@@ -259,10 +270,11 @@ export default function IntakeNew() {
   );
 }
 
-function Field({ label, type = "text", value, onChange, error }) {
+function Field({ label, subtitle = "", type = "text", value, onChange, error }) {
   return (
     <label className="block">
       <div className="mb-1 text-sm text-neutral-200">{label}</div>
+      {subtitle ? <div className="mb-1 text-xs text-neutral-500">{subtitle}</div> : null}
       <input
         type={type}
         value={value}
@@ -274,10 +286,11 @@ function Field({ label, type = "text", value, onChange, error }) {
   );
 }
 
-function TextArea({ label, value, onChange, error, className = "" }) {
+function TextArea({ label, subtitle = "", value, onChange, error, className = "" }) {
   return (
     <label className={className}>
       <div className="mb-1 text-sm text-neutral-200">{label}</div>
+      {subtitle ? <div className="mb-1 text-xs text-neutral-500">{subtitle}</div> : null}
       <textarea
         value={value}
         onChange={(event) => onChange(event.target.value)}

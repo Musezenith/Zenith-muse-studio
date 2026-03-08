@@ -3,6 +3,7 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 import { useToast } from "../components/ToastProvider";
 import { getJob } from "../lib/jobsClient";
 import { createQuote, draftQuote } from "../lib/quotesClient";
+import BilingualText from "../components/BilingualText";
 
 const initialInputs = {
   package_type: "starter",
@@ -148,12 +149,13 @@ export default function QuoteNew() {
         </Link>
       </div>
 
-      <div>
-        <h1 className="text-3xl font-semibold text-white">Quote Generator</h1>
-        <p className="mt-1 text-sm text-neutral-400">
-          {job.brand} | {job.client_name}
-        </p>
-      </div>
+      <BilingualText
+        as="h1"
+        title="Quote Generator"
+        subtitle={`Tạo báo giá có cấu trúc cho ${job.brand} | ${job.client_name}`}
+        titleClassName="text-3xl font-semibold text-white"
+        subtitleClassName="text-sm text-neutral-400"
+      />
 
       {error ? (
         <div className="rounded-2xl border border-red-900/60 bg-red-950/50 p-4 text-sm text-red-200">
@@ -163,9 +165,15 @@ export default function QuoteNew() {
 
       <div className="grid gap-4 lg:grid-cols-2">
         <section className="rounded-2xl border border-neutral-800 bg-neutral-950/70 p-4 space-y-3">
-          <h2 className="text-sm font-semibold text-white">Inputs</h2>
+          <BilingualText
+            as="h2"
+            title="Inputs"
+            subtitle="Thông số gói dịch vụ để hệ thống tính báo giá"
+            titleClassName="text-sm font-semibold text-white"
+          />
           <SelectField
             label="Package Type"
+            subtitle="Loại gói dịch vụ"
             value={inputs.package_type}
             onChange={(value) => setInputs((prev) => ({ ...prev, package_type: value }))}
             options={[
@@ -176,6 +184,7 @@ export default function QuoteNew() {
           />
           <NumberField
             label="Number of Final Images"
+            subtitle="Số lượng ảnh bàn giao"
             value={inputs.number_of_final_images}
             onChange={(value) =>
               setInputs((prev) => ({ ...prev, number_of_final_images: Number(value) || 1 }))
@@ -183,6 +192,7 @@ export default function QuoteNew() {
           />
           <NumberField
             label="Number of Directions"
+            subtitle="Số hướng sáng tạo"
             value={inputs.number_of_directions}
             onChange={(value) =>
               setInputs((prev) => ({ ...prev, number_of_directions: Number(value) || 1 }))
@@ -190,6 +200,7 @@ export default function QuoteNew() {
           />
           <NumberField
             label="Revision Rounds"
+            subtitle="Số vòng chỉnh sửa"
             value={inputs.revision_rounds}
             onChange={(value) =>
               setInputs((prev) => ({ ...prev, revision_rounds: Math.max(0, Number(value) || 0) }))
@@ -197,6 +208,7 @@ export default function QuoteNew() {
           />
           <SelectField
             label="Deadline Urgency"
+            subtitle="Mức độ gấp của deadline"
             value={inputs.deadline_urgency}
             onChange={(value) => setInputs((prev) => ({ ...prev, deadline_urgency: value }))}
             options={[
@@ -207,6 +219,7 @@ export default function QuoteNew() {
           />
           <SelectField
             label="Usage Scope"
+            subtitle="Phạm vi sử dụng đầu ra"
             value={inputs.usage_scope}
             onChange={(value) => setInputs((prev) => ({ ...prev, usage_scope: value }))}
             options={[
@@ -235,31 +248,41 @@ export default function QuoteNew() {
         </section>
 
         <section className="rounded-2xl border border-neutral-800 bg-neutral-950/70 p-4 space-y-3">
-          <h2 className="text-sm font-semibold text-white">Manual Override</h2>
+          <BilingualText
+            as="h2"
+            title="Manual Override"
+            subtitle="Chỉnh tay trước khi lưu phiên bản báo giá"
+            titleClassName="text-sm font-semibold text-white"
+          />
           <NumberField
             label="Quote Amount"
+            subtitle="Số tiền báo giá cuối cùng"
             value={manual.price}
             onChange={(value) => setManual((prev) => ({ ...prev, price: value }))}
           />
           <NumberField
             label="Revision Limit"
+            subtitle="Giới hạn lượt chỉnh sửa"
             value={manual.revision_limit}
             onChange={(value) => setManual((prev) => ({ ...prev, revision_limit: value }))}
           />
           <TextField
             label="Scope Summary"
+            subtitle="Tóm tắt phạm vi thực hiện"
             value={manual.scope_summary}
             onChange={(value) => setManual((prev) => ({ ...prev, scope_summary: value }))}
             rows={4}
           />
           <TextField
             label="Delivery Timeline"
+            subtitle="Mốc thời gian bàn giao"
             value={manual.delivery_timeline}
             onChange={(value) => setManual((prev) => ({ ...prev, delivery_timeline: value }))}
             rows={2}
           />
           <TextField
             label="Assumptions"
+            subtitle="Giả định và điều kiện đi kèm"
             value={manual.assumptions}
             onChange={(value) => setManual((prev) => ({ ...prev, assumptions: value }))}
             rows={5}
@@ -269,7 +292,12 @@ export default function QuoteNew() {
 
       {draft ? (
         <section className="rounded-2xl border border-neutral-800 bg-neutral-950/70 p-4">
-          <h2 className="text-sm font-semibold text-white">Draft Preview</h2>
+          <BilingualText
+            as="h2"
+            title="Draft Preview"
+            subtitle="Bản nháp báo giá để rà soát trước khi lưu"
+            titleClassName="text-sm font-semibold text-white"
+          />
           <div className="mt-2 text-xs text-neutral-400">
             Mode: {inputs.is_pilot ? "pilot" : "standard"}
           </div>
@@ -297,10 +325,11 @@ export default function QuoteNew() {
   );
 }
 
-function SelectField({ label, value, onChange, options }) {
+function SelectField({ label, subtitle = "", value, onChange, options }) {
   return (
     <label className="block">
       <div className="mb-1 text-sm text-neutral-200">{label}</div>
+      {subtitle ? <div className="mb-1 text-xs text-neutral-500">{subtitle}</div> : null}
       <select
         value={value}
         onChange={(event) => onChange(event.target.value)}
@@ -316,10 +345,11 @@ function SelectField({ label, value, onChange, options }) {
   );
 }
 
-function NumberField({ label, value, onChange }) {
+function NumberField({ label, subtitle = "", value, onChange }) {
   return (
     <label className="block">
       <div className="mb-1 text-sm text-neutral-200">{label}</div>
+      {subtitle ? <div className="mb-1 text-xs text-neutral-500">{subtitle}</div> : null}
       <input
         type="number"
         min="0"
@@ -331,10 +361,11 @@ function NumberField({ label, value, onChange }) {
   );
 }
 
-function TextField({ label, value, onChange, rows = 3 }) {
+function TextField({ label, subtitle = "", value, onChange, rows = 3 }) {
   return (
     <label className="block">
       <div className="mb-1 text-sm text-neutral-200">{label}</div>
+      {subtitle ? <div className="mb-1 text-xs text-neutral-500">{subtitle}</div> : null}
       <textarea
         rows={rows}
         value={value}

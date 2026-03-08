@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { listDocuments } from "../lib/documentsClient";
 import { deriveDocumentsMeta, filterDocuments } from "../lib/documentsFilter";
+import BilingualText from "../components/BilingualText";
 
 function statusBadgeClass(status) {
   if (status === "active") {
@@ -59,14 +60,21 @@ export default function DocsHub() {
 
   return (
     <div className="mx-auto w-full max-w-6xl min-w-0 space-y-6 overflow-x-hidden">
-      <div>
-        <h1 className="text-3xl font-semibold text-white">Docs Hub</h1>
-        <p className="mt-1 text-sm text-neutral-400">
-          Central operating documents for studio workflows.
-        </p>
-      </div>
+      <BilingualText
+        as="h1"
+        title="Docs Hub"
+        subtitle="Kho tài liệu vận hành trung tâm cho toàn bộ quy trình studio."
+        titleClassName="text-3xl font-semibold text-white"
+        subtitleClassName="text-sm text-neutral-400"
+      />
 
       <section className="rounded-2xl border border-neutral-800 bg-neutral-950/70 p-4">
+        <BilingualText
+          title="Filters"
+          subtitle="Bộ lọc theo từ khóa, danh mục, trạng thái và thẻ."
+          titleClassName="text-xs uppercase tracking-[0.2em] text-neutral-500"
+          className="mb-3"
+        />
         <div className="grid gap-3 md:grid-cols-4">
           <input
             value={query}

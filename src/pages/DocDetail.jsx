@@ -3,6 +3,7 @@ import { Link, useParams } from "react-router-dom";
 import { getDocument, listDocuments } from "../lib/documentsClient";
 import { useToast } from "../components/ToastProvider";
 import { getRelatedDocuments, renderMarkdownDocument } from "../lib/documentsDetail";
+import BilingualText from "../components/BilingualText";
 
 function formatDate(dateText) {
   if (!dateText) return "Unknown";
@@ -144,7 +145,13 @@ export default function DocDetail() {
               v{item.version || 1}
             </span>
           </div>
-          <h1 className="mt-3 text-3xl font-semibold text-white">{item.title}</h1>
+          <BilingualText
+            as="h1"
+            title={item.title}
+            subtitle="Tài liệu vận hành chi tiết"
+            titleClassName="mt-3 text-3xl font-semibold text-white"
+            subtitleClassName="text-sm text-neutral-400"
+          />
           <p className="mt-2 text-sm text-neutral-300">{item.summary || "No summary"}</p>
           <div className="mt-3 text-xs text-neutral-500">
             Owner: {item.owner || "unknown"} | Updated: {formatDate(item.updated_at)}
@@ -176,7 +183,12 @@ export default function DocDetail() {
 
         <aside className="space-y-4 print-hidden">
           <section className="rounded-2xl border border-neutral-800 bg-neutral-950/70 p-4">
-            <h2 className="text-sm font-semibold text-white">Table of Contents</h2>
+            <BilingualText
+              as="h2"
+              title="Table of Contents"
+              subtitle="Mục lục theo heading trong tài liệu"
+              titleClassName="text-sm font-semibold text-white"
+            />
             {markdown.headings.length === 0 ? (
               <p className="mt-2 text-xs text-neutral-500">
                 No section headings were found in this document.
@@ -198,7 +210,12 @@ export default function DocDetail() {
           </section>
 
           <section className="rounded-2xl border border-neutral-800 bg-neutral-950/70 p-4">
-            <h2 className="text-sm font-semibold text-white">Related Documents</h2>
+            <BilingualText
+              as="h2"
+              title="Related Documents"
+              subtitle="Tài liệu liên quan theo danh mục hoặc thẻ"
+              titleClassName="text-sm font-semibold text-white"
+            />
             {relatedDocs.length === 0 ? (
               <p className="mt-2 text-xs text-neutral-500">
                 No related documents found.
