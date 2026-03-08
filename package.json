@@ -2,6 +2,9 @@
   "name": "muse-studio",
   "private": true,
   "version": "0.1.0",
+  "engines": {
+    "node": ">=20 <21"
+  },
   "scripts": {
     "dev": "vite",
     "dev:api": "node server/index.mjs",
