@@ -77,9 +77,47 @@ import {
 import { deriveGenerationHealthSummary } from "./generationHealthSummary.mjs";
 import { renderGenerationMetrics } from "./generationMetrics.mjs";
 import { getStudioPresetById, listStudioPresets } from "./studioPresets.mjs";
+import { compilePrompt as compileVisualGrammarPrompt } from "./studioVisualGrammarCompiler.mjs";
+import {
+  archiveMikageRun,
+  addMikageReferenceStyleBlocks,
+  compileMikagePackageAndRun,
+  compileMikagePromptRecipe,
+  compileMikagePrompts,
+  createMikageJobPlan,
+  createMikagePresetFromReference,
+  createMikagePresetFromReferenceStyle,
+  decideMikageCanonGate,
+  getMikageJobById,
+  getMikageControlRoom,
+  getMikageOverview,
+  getMikageReferenceStyleById,
+  getMikageRunById,
+  initializeMikageWorkflowStore,
+  createMikageProofSet,
+  listMikageCanonAssets,
+  listMikageArchiveAssets,
+  listMikageCompiledPrompts,
+  listMikageJobPlans,
+  listMikageJobs,
+  listMikageProofSets,
+  listMikageReferences,
+  listMikageStudioPresets,
+  listMikageReviewScores,
+  listMikageRuns,
+  rerunMikagePipeline,
+  rerunMikageMode,
+  updateMikageCanonAsset,
+  updateMikageReviewSheet,
+  upsertMikageReferenceStyle,
+  upsertMikageReference,
+  upsertMikageReviewScore,
+} from "./mikageWorkflowStore.mjs";
+import { createJobController } from "./jobController.mjs";
 
 const port = Number(process.env.PORT || 8787);
 const corsOrigin = process.env.CORS_ORIGIN || "*";
+const jobController = createJobController();
 
 function writeJson(res, statusCode, body) {
   res.writeHead(statusCode, {
@@ -153,6 +191,35 @@ function toErrorResponse(error, requestId) {
         details: error.body || null,
       },
     },
+  };
+}
+
+function sanitizeGenerateText(value, maxLength = 600) {
+  if (typeof value !== "string") return "";
+  return value.trim().replace(/\s+/g, " ").slice(0, maxLength);
+}
+
+function validateVisualGrammarGenerateInput(input = {}) {
+  const errors = {};
+  const value = {
+    preset_id: sanitizeGenerateText(input.preset_id, 120),
+    archetype_id: sanitizeGenerateText(input.archetype_id, 120),
+    environment_id: sanitizeGenerateText(input.environment_id, 120),
+    subject: sanitizeGenerateText(input.subject, 600),
+    wardrobe: sanitizeGenerateText(input.wardrobe, 400),
+    pose: sanitizeGenerateText(input.pose, 300),
+    framing: sanitizeGenerateText(input.framing, 200),
+  };
+  if (!value.preset_id) errors.preset_id = "preset_id is required";
+  if (!value.archetype_id) errors.archetype_id = "archetype_id is required";
+  if (!value.environment_id) errors.environment_id = "environment_id is required";
+  if (!value.subject) errors.subject = "subject is required";
+  if (!value.wardrobe) errors.wardrobe = "wardrobe is required";
+  if (!value.pose) errors.pose = "pose is required";
+  return {
+    ok: Object.keys(errors).length === 0,
+    errors,
+    value,
   };
 }
 
@@ -330,6 +397,775 @@ const server = http.createServer(async (req, res) => {
         error: {
           code: "STUDIO_PRESET_DETAIL_FAILED",
           message: error.message || "Studio preset detail failed",
+        },
+      });
+    }
+    return;
+  }
+
+  if (pathname === "/api/mikage/overview" && req.method === "GET") {
+    try {
+      const payload = await getMikageOverview();
+      writeJson(res, 200, payload);
+    } catch (error) {
+      writeJson(res, 500, {
+        error: {
+          code: "MIKAGE_OVERVIEW_FAILED",
+          message: error.message || "Mikage overview failed",
+        },
+      });
+    }
+    return;
+  }
+
+  if (pathname === "/api/mikage/control-room" && req.method === "GET") {
+    try {
+      const item = await getMikageControlRoom(requestUrl.searchParams.get("project_id") || "");
+      writeJson(res, 200, { item });
+    } catch (error) {
+      writeJson(res, 500, {
+        error: {
+          code: "MIKAGE_CONTROL_ROOM_FAILED",
+          message: error.message || "Mikage control room failed",
+        },
+      });
+    }
+    return;
+  }
+
+  if (pathname === "/api/mikage/jobs" && req.method === "GET") {
+    try {
+      const items = await listMikageJobs();
+      writeJson(res, 200, { items });
+    } catch (error) {
+      writeJson(res, 500, {
+        error: {
+          code: "MIKAGE_JOBS_LIST_FAILED",
+          message: error.message || "Mikage jobs list failed",
+        },
+      });
+    }
+    return;
+  }
+
+  if (pathname === "/api/mikage/jobs" && req.method === "POST") {
+    try {
+      const body = await readJsonBody(req);
+      const item = await jobController.createJob(body);
+      writeJson(res, 201, { item });
+    } catch (error) {
+      const status = Number.isInteger(error.status) ? error.status : 500;
+      writeJson(res, status, {
+        error: {
+          code: status === 400 ? "VALIDATION_ERROR" : "MIKAGE_JOB_CREATE_FAILED",
+          message: error.message || "Mikage job create failed",
+          details: error.body || null,
+        },
+      });
+    }
+    return;
+  }
+
+  if (pathname === "/api/mikage/compile-run" && req.method === "POST") {
+    try {
+      const body = await readJsonBody(req);
+      const item = await compileMikagePackageAndRun(body || {});
+      writeJson(res, 200, item);
+    } catch (error) {
+      const status = Number.isInteger(error.status) ? error.status : 500;
+      writeJson(res, status, {
+        error: {
+          code: status === 400 ? "VALIDATION_ERROR" : "MIKAGE_COMPILE_RUN_FAILED",
+          message: error.message || "Mikage compile-and-run failed",
+          details: error.body || null,
+        },
+      });
+    }
+    return;
+  }
+
+  if (pathname === "/api/mikage/job-plans" && req.method === "GET") {
+    try {
+      const items = await listMikageJobPlans({
+        project_id: requestUrl.searchParams.get("project_id") || "",
+      });
+      writeJson(res, 200, { items });
+    } catch (error) {
+      writeJson(res, 500, {
+        error: {
+          code: "MIKAGE_JOB_PLAN_LIST_FAILED",
+          message: error.message || "Mikage job plan list failed",
+        },
+      });
+    }
+    return;
+  }
+
+  if (pathname === "/api/mikage/job-plans" && req.method === "POST") {
+    try {
+      const body = await readJsonBody(req);
+      const item = await jobController.createJobPlan(body || {});
+      writeJson(res, 201, { item });
+    } catch (error) {
+      const status = Number.isInteger(error.status) ? error.status : 500;
+      writeJson(res, status, {
+        error: {
+          code: status === 400 ? "VALIDATION_ERROR" : status === 404 ? "NOT_FOUND" : "MIKAGE_JOB_PLAN_CREATE_FAILED",
+          message: error.message || "Mikage job plan create failed",
+          details: error.body || null,
+        },
+      });
+    }
+    return;
+  }
+
+  if (pathname === "/api/mikage/compiled-prompts" && req.method === "GET") {
+    try {
+      const items = await listMikageCompiledPrompts({
+        job_plan_id: requestUrl.searchParams.get("job_plan_id") || "",
+        run_id: requestUrl.searchParams.get("run_id") || "",
+      });
+      writeJson(res, 200, { items });
+    } catch (error) {
+      writeJson(res, 500, {
+        error: {
+          code: "MIKAGE_COMPILED_PROMPTS_LIST_FAILED",
+          message: error.message || "Mikage compiled prompts list failed",
+        },
+      });
+    }
+    return;
+  }
+
+  if (pathname === "/api/mikage/compiled-prompts" && req.method === "POST") {
+    try {
+      const body = await readJsonBody(req);
+      const item = await jobController.compilePrompts(body || {});
+      writeJson(res, 200, { item });
+    } catch (error) {
+      const status = Number.isInteger(error.status) ? error.status : 500;
+      writeJson(res, status, {
+        error: {
+          code: status === 404 ? "NOT_FOUND" : status === 400 ? "VALIDATION_ERROR" : "MIKAGE_COMPILE_PROMPTS_FAILED",
+          message: error.message || "Mikage prompt compile failed",
+          details: error.body || null,
+        },
+      });
+    }
+    return;
+  }
+
+  if (pathname === "/api/mikage/run-three-modes" && req.method === "POST") {
+    try {
+      const body = await readJsonBody(req);
+      const jobId = String(body?.job_id || "").trim();
+      if (!jobId) {
+        writeJson(res, 400, {
+          error: {
+            code: "VALIDATION_ERROR",
+            message: "job_id is required",
+          },
+        });
+        return;
+      }
+      const item = await jobController.runThreeModes({
+        job_id: jobId,
+        actor: body?.actor || "operator",
+        canon_seed: Number.isInteger(body?.canon_seed) ? body.canon_seed : undefined,
+        batch_size: Number(body?.batch_size || 24),
+        job_plan_id: body?.job_plan_id || "",
+      });
+      writeJson(res, 200, { item });
+    } catch (error) {
+      const status = Number.isInteger(error.status) ? error.status : 500;
+      writeJson(res, status, {
+        error: {
+          code:
+            status === 400
+              ? "VALIDATION_ERROR"
+              : status === 404
+              ? "NOT_FOUND"
+              : "MIKAGE_RUN_THREE_MODES_FAILED",
+          message: error.message || "Mikage three-mode run failed",
+          details: error.body || null,
+        },
+      });
+    }
+    return;
+  }
+
+  if (pathname.startsWith("/api/mikage/jobs/") && pathname.endsWith("/run-batch") && req.method === "POST") {
+    try {
+      const jobId = decodeURIComponent(pathname.replace("/api/mikage/jobs/", "").replace("/run-batch", ""));
+      const body = await readJsonBody(req);
+      if (!jobId) {
+        writeJson(res, 400, {
+          error: {
+            code: "VALIDATION_ERROR",
+            message: "job_id is required",
+          },
+        });
+        return;
+      }
+      const item = await jobController.runBatch({
+        job_id: jobId,
+        actor: body?.actor || "operator",
+        canon_seed: Number.isInteger(body?.canon_seed) ? body.canon_seed : undefined,
+        batch_size: Number(body?.batch_size || 24),
+        variant_runs: Number(body?.variant_runs || 0),
+        rerun_sequences: Number(body?.rerun_sequences || 0),
+      });
+      writeJson(res, 200, { item });
+    } catch (error) {
+      const status = Number.isInteger(error.status) ? error.status : 500;
+      writeJson(res, status, {
+        error: {
+          code:
+            status === 400
+              ? "VALIDATION_ERROR"
+              : status === 404
+              ? "NOT_FOUND"
+              : "MIKAGE_BATCH_EXECUTION_FAILED",
+          message: error.message || "Mikage run batch failed",
+          details: error.body || null,
+        },
+      });
+    }
+    return;
+  }
+
+  if (pathname.startsWith("/api/mikage/jobs/") && pathname.endsWith("/runs") && req.method === "GET") {
+    try {
+      const jobId = decodeURIComponent(pathname.replace("/api/mikage/jobs/", "").replace("/runs", ""));
+      if (!jobId) {
+        writeJson(res, 404, {
+          error: {
+            code: "NOT_FOUND",
+            message: "Job not found",
+          },
+        });
+        return;
+      }
+      const items = await listMikageRuns({ job_id: jobId });
+      writeJson(res, 200, { items });
+    } catch (error) {
+      writeJson(res, 500, {
+        error: {
+          code: "MIKAGE_RUNS_LIST_FAILED",
+          message: error.message || "Mikage runs list failed",
+        },
+      });
+    }
+    return;
+  }
+
+  if (pathname.startsWith("/api/mikage/jobs/") && req.method === "GET") {
+    try {
+      const jobId = decodeURIComponent(pathname.replace("/api/mikage/jobs/", ""));
+      if (!jobId) {
+        writeJson(res, 404, {
+          error: {
+            code: "NOT_FOUND",
+            message: "Job not found",
+          },
+        });
+        return;
+      }
+      const item = await getMikageJobById(jobId);
+      if (!item) {
+        writeJson(res, 404, {
+          error: {
+            code: "NOT_FOUND",
+            message: "Job not found",
+          },
+        });
+        return;
+      }
+      writeJson(res, 200, { item });
+    } catch (error) {
+      writeJson(res, 500, {
+        error: {
+          code: "MIKAGE_JOB_DETAIL_FAILED",
+          message: error.message || "Mikage job detail failed",
+        },
+      });
+    }
+    return;
+  }
+
+  if (pathname.startsWith("/api/mikage/runs/") && pathname.endsWith("/rerun-mode") && req.method === "POST") {
+    try {
+      const runId = decodeURIComponent(pathname.replace("/api/mikage/runs/", "").replace("/rerun-mode", ""));
+      const body = await readJsonBody(req);
+      const item = await rerunMikageMode(runId, body?.mode, {
+        actor: body?.actor || "operator",
+      });
+      writeJson(res, 200, { item });
+    } catch (error) {
+      const status = Number.isInteger(error.status) ? error.status : 500;
+      writeJson(res, status, {
+        error: {
+          code:
+            status === 400
+              ? "VALIDATION_ERROR"
+              : status === 404
+              ? "NOT_FOUND"
+              : "MIKAGE_RERUN_MODE_FAILED",
+          message: error.message || "Mikage rerun mode failed",
+          details: error.body || null,
+        },
+      });
+    }
+    return;
+  }
+
+  if (pathname === "/api/mikage/runs" && req.method === "GET") {
+    try {
+      const items = await listMikageRuns({
+        job_id: requestUrl.searchParams.get("job_id") || "",
+      });
+      writeJson(res, 200, { items });
+    } catch (error) {
+      writeJson(res, 500, {
+        error: {
+          code: "MIKAGE_RUNS_QUEUE_FAILED",
+          message: error.message || "Mikage runs queue failed",
+        },
+      });
+    }
+    return;
+  }
+
+  if (pathname.startsWith("/api/mikage/runs/") && pathname.endsWith("/rerun-pipeline") && req.method === "POST") {
+    try {
+      const runId = decodeURIComponent(pathname.replace("/api/mikage/runs/", "").replace("/rerun-pipeline", ""));
+      const body = await readJsonBody(req);
+      const item = await rerunMikagePipeline(runId, {
+        actor: body?.actor || "operator",
+      });
+      writeJson(res, 200, { item });
+    } catch (error) {
+      const status = Number.isInteger(error.status) ? error.status : 500;
+      writeJson(res, status, {
+        error: {
+          code:
+            status === 400
+              ? "VALIDATION_ERROR"
+              : status === 404
+              ? "NOT_FOUND"
+              : "MIKAGE_RERUN_PIPELINE_FAILED",
+          message: error.message || "Mikage rerun pipeline failed",
+          details: error.body || null,
+        },
+      });
+    }
+    return;
+  }
+
+  if (pathname.startsWith("/api/mikage/runs/") && pathname.endsWith("/review") && req.method === "PUT") {
+    try {
+      const runId = decodeURIComponent(pathname.replace("/api/mikage/runs/", "").replace("/review", ""));
+      const body = await readJsonBody(req);
+      const item = await updateMikageReviewSheet(runId, body || {});
+      writeJson(res, 200, { item });
+    } catch (error) {
+      const status = Number.isInteger(error.status) ? error.status : 500;
+      writeJson(res, status, {
+        error: {
+          code: status === 404 ? "NOT_FOUND" : "MIKAGE_REVIEW_UPDATE_FAILED",
+          message: error.message || "Mikage review update failed",
+          details: error.body || null,
+        },
+      });
+    }
+    return;
+  }
+
+  if (pathname.startsWith("/api/mikage/runs/") && pathname.endsWith("/review-score") && req.method === "GET") {
+    try {
+      const runId = decodeURIComponent(pathname.replace("/api/mikage/runs/", "").replace("/review-score", ""));
+      const items = await listMikageReviewScores({ run_id: runId });
+      writeJson(res, 200, { items });
+    } catch (error) {
+      writeJson(res, 500, {
+        error: {
+          code: "MIKAGE_REVIEW_SCORE_LIST_FAILED",
+          message: error.message || "Mikage review scores list failed",
+        },
+      });
+    }
+    return;
+  }
+
+  if (pathname.startsWith("/api/mikage/runs/") && pathname.endsWith("/review-score") && req.method === "POST") {
+    try {
+      const runId = decodeURIComponent(pathname.replace("/api/mikage/runs/", "").replace("/review-score", ""));
+      const body = await readJsonBody(req);
+      const item = await jobController.submitReviewScore(runId, body || {});
+      writeJson(res, 200, { item });
+    } catch (error) {
+      const status = Number.isInteger(error.status) ? error.status : 500;
+      writeJson(res, status, {
+        error: {
+          code: status === 404 ? "NOT_FOUND" : status === 400 ? "VALIDATION_ERROR" : "MIKAGE_REVIEW_SCORE_FAILED",
+          message: error.message || "Mikage review score update failed",
+          details: error.body || null,
+        },
+      });
+    }
+    return;
+  }
+
+  if (pathname.startsWith("/api/mikage/runs/") && pathname.endsWith("/canon-gate") && req.method === "POST") {
+    try {
+      const runId = decodeURIComponent(pathname.replace("/api/mikage/runs/", "").replace("/canon-gate", ""));
+      const body = await readJsonBody(req);
+      const item = await jobController.submitCanonDecision(runId, body || {});
+      writeJson(res, 200, { item });
+    } catch (error) {
+      const status = Number.isInteger(error.status) ? error.status : 500;
+      writeJson(res, status, {
+        error: {
+          code: status === 400 ? "VALIDATION_ERROR" : status === 404 ? "NOT_FOUND" : "MIKAGE_CANON_GATE_FAILED",
+          message: error.message || "Mikage canon gate failed",
+          details: error.body || null,
+        },
+      });
+    }
+    return;
+  }
+
+  if (pathname.startsWith("/api/mikage/runs/") && pathname.endsWith("/archive") && req.method === "POST") {
+    try {
+      const runId = decodeURIComponent(pathname.replace("/api/mikage/runs/", "").replace("/archive", ""));
+      const body = await readJsonBody(req);
+      const item = await jobController.archiveRun(runId, body || {});
+      writeJson(res, 200, { item });
+    } catch (error) {
+      const status = Number.isInteger(error.status) ? error.status : 500;
+      writeJson(res, status, {
+        error: {
+          code: status === 400 ? "VALIDATION_ERROR" : status === 404 ? "NOT_FOUND" : "MIKAGE_ARCHIVE_FAILED",
+          message: error.message || "Mikage archive failed",
+          details: error.body || null,
+        },
+      });
+    }
+    return;
+  }
+
+  if (pathname.startsWith("/api/mikage/runs/") && req.method === "GET") {
+    try {
+      const runId = decodeURIComponent(pathname.replace("/api/mikage/runs/", ""));
+      if (!runId) {
+        writeJson(res, 404, {
+          error: {
+            code: "NOT_FOUND",
+            message: "Run not found",
+          },
+        });
+        return;
+      }
+      const item = await getMikageRunById(runId);
+      if (!item) {
+        writeJson(res, 404, {
+          error: {
+            code: "NOT_FOUND",
+            message: "Run not found",
+          },
+        });
+        return;
+      }
+      writeJson(res, 200, { item });
+    } catch (error) {
+      writeJson(res, 500, {
+        error: {
+          code: "MIKAGE_RUN_DETAIL_FAILED",
+          message: error.message || "Mikage run detail failed",
+        },
+      });
+    }
+    return;
+  }
+
+  if (pathname === "/api/mikage/archive" && req.method === "GET") {
+    try {
+      const items = await listMikageArchiveAssets({
+        client: requestUrl.searchParams.get("client") || "",
+        campaign: requestUrl.searchParams.get("campaign") || "",
+        project: requestUrl.searchParams.get("project") || "",
+        character: requestUrl.searchParams.get("character") || "",
+        collection: requestUrl.searchParams.get("collection") || "",
+        mode: requestUrl.searchParams.get("mode") || "",
+        preset: requestUrl.searchParams.get("preset") || "",
+        visual_mood: requestUrl.searchParams.get("visual_mood") || "",
+        rank_by: requestUrl.searchParams.get("rank_by") || "",
+        proof_worthy: requestUrl.searchParams.get("proof_worthy") || "",
+        canon_only: requestUrl.searchParams.get("canon_only") || "",
+        date_from: requestUrl.searchParams.get("date_from") || "",
+        date_to: requestUrl.searchParams.get("date_to") || "",
+      });
+      writeJson(res, 200, { items });
+    } catch (error) {
+      writeJson(res, 500, {
+        error: {
+          code: "MIKAGE_ARCHIVE_LIST_FAILED",
+          message: error.message || "Mikage archive list failed",
+        },
+      });
+    }
+    return;
+  }
+
+  if (pathname === "/api/mikage/canon-assets" && req.method === "GET") {
+    try {
+      const items = await listMikageCanonAssets({
+        project: requestUrl.searchParams.get("project") || "",
+        character: requestUrl.searchParams.get("character") || "",
+        mode: requestUrl.searchParams.get("mode") || "",
+        output_goal: requestUrl.searchParams.get("output_goal") || "",
+        canon_status: requestUrl.searchParams.get("canon_status") || "",
+        score: requestUrl.searchParams.get("score") || "",
+        date_from: requestUrl.searchParams.get("date_from") || "",
+        date_to: requestUrl.searchParams.get("date_to") || "",
+        sort: requestUrl.searchParams.get("sort") || "",
+      });
+      writeJson(res, 200, { items });
+    } catch (error) {
+      writeJson(res, 500, {
+        error: {
+          code: "MIKAGE_CANON_ASSETS_LIST_FAILED",
+          message: error.message || "Mikage canon assets list failed",
+        },
+      });
+    }
+    return;
+  }
+
+  if (pathname.startsWith("/api/mikage/canon-assets/") && req.method === "PUT") {
+    try {
+      const assetId = decodeURIComponent(pathname.replace("/api/mikage/canon-assets/", ""));
+      const body = await readJsonBody(req);
+      const item = await updateMikageCanonAsset(assetId, body || {});
+      writeJson(res, 200, { item });
+    } catch (error) {
+      const status = Number.isInteger(error.status) ? error.status : 500;
+      writeJson(res, status, {
+        error: {
+          code: status === 404 ? "NOT_FOUND" : "MIKAGE_CANON_ASSET_UPDATE_FAILED",
+          message: error.message || "Mikage canon asset update failed",
+          details: error.body || null,
+        },
+      });
+    }
+    return;
+  }
+
+  if (pathname === "/api/mikage/references" && req.method === "GET") {
+    try {
+      const items = await listMikageReferences({
+        palette: requestUrl.searchParams.get("palette") || "",
+        mood: requestUrl.searchParams.get("mood") || "",
+        culture: requestUrl.searchParams.get("culture") || "",
+        lighting: requestUrl.searchParams.get("lighting") || "",
+        texture: requestUrl.searchParams.get("texture") || "",
+        search: requestUrl.searchParams.get("search") || "",
+      });
+      writeJson(res, 200, { items });
+    } catch (error) {
+      writeJson(res, 500, {
+        error: {
+          code: "MIKAGE_REFERENCE_LIST_FAILED",
+          message: error.message || "Mikage reference list failed",
+        },
+      });
+    }
+    return;
+  }
+
+  if (pathname === "/api/mikage/references" && req.method === "POST") {
+    try {
+      const body = await readJsonBody(req);
+      const item = await upsertMikageReference(body || {});
+      writeJson(res, 201, { item });
+    } catch (error) {
+      const status = Number.isInteger(error.status) ? error.status : 500;
+      writeJson(res, status, {
+        error: {
+          code: status === 400 ? "VALIDATION_ERROR" : "MIKAGE_REFERENCE_UPSERT_FAILED",
+          message: error.message || "Mikage reference upsert failed",
+          details: error.body || null,
+        },
+      });
+    }
+    return;
+  }
+
+  if (pathname === "/api/mikage/reference-styles" && req.method === "POST") {
+    try {
+      const body = await readJsonBody(req);
+      const item = await upsertMikageReferenceStyle(body || {});
+      writeJson(res, 201, { item });
+    } catch (error) {
+      const status = Number.isInteger(error.status) ? error.status : 500;
+      writeJson(res, status, {
+        error: {
+          code: status === 400 ? "VALIDATION_ERROR" : "MIKAGE_REFERENCE_STYLE_UPSERT_FAILED",
+          message: error.message || "Mikage reference style upsert failed",
+          details: error.body || null,
+        },
+      });
+    }
+    return;
+  }
+
+  if (pathname.startsWith("/api/mikage/reference-styles/") && pathname.endsWith("/blocks") && req.method === "POST") {
+    try {
+      const styleId = decodeURIComponent(pathname.replace("/api/mikage/reference-styles/", "").replace("/blocks", ""));
+      const body = await readJsonBody(req);
+      const items = await addMikageReferenceStyleBlocks(styleId, body || {});
+      writeJson(res, 201, { items });
+    } catch (error) {
+      const status = Number.isInteger(error.status) ? error.status : 500;
+      writeJson(res, status, {
+        error: {
+          code: status === 404 ? "NOT_FOUND" : "MIKAGE_REFERENCE_BLOCK_CREATE_FAILED",
+          message: error.message || "Mikage reference blocks create failed",
+          details: error.body || null,
+        },
+      });
+    }
+    return;
+  }
+
+  if (pathname.startsWith("/api/mikage/reference-styles/") && req.method === "GET") {
+    try {
+      const styleId = decodeURIComponent(pathname.replace("/api/mikage/reference-styles/", ""));
+      const item = await getMikageReferenceStyleById(styleId);
+      if (!item) {
+        writeJson(res, 404, {
+          error: {
+            code: "NOT_FOUND",
+            message: "Reference style not found",
+          },
+        });
+        return;
+      }
+      writeJson(res, 200, { item });
+    } catch (error) {
+      writeJson(res, 500, {
+        error: {
+          code: "MIKAGE_REFERENCE_STYLE_DETAIL_FAILED",
+          message: error.message || "Mikage reference style detail failed",
+        },
+      });
+    }
+    return;
+  }
+
+  if (pathname === "/api/mikage/presets" && req.method === "GET") {
+    try {
+      const items = await listMikageStudioPresets();
+      writeJson(res, 200, { items });
+    } catch (error) {
+      writeJson(res, 500, {
+        error: {
+          code: "MIKAGE_PRESET_LIST_FAILED",
+          message: error.message || "Mikage presets list failed",
+        },
+      });
+    }
+    return;
+  }
+
+  if (pathname === "/api/mikage/presets/from-reference" && req.method === "POST") {
+    try {
+      const body = await readJsonBody(req);
+      const item = await createMikagePresetFromReferenceStyle(body || {});
+      writeJson(res, 201, { item });
+    } catch (error) {
+      const status = Number.isInteger(error.status) ? error.status : 500;
+      writeJson(res, status, {
+        error: {
+          code: status === 404 ? "NOT_FOUND" : "MIKAGE_PRESET_FROM_REFERENCE_FAILED",
+          message: error.message || "Mikage preset from reference failed",
+          details: error.body || null,
+        },
+      });
+    }
+    return;
+  }
+
+  if (pathname === "/api/mikage/compile-prompt" && req.method === "POST") {
+    try {
+      const body = await readJsonBody(req);
+      const item = await compileMikagePromptRecipe(body || {});
+      writeJson(res, 200, { item });
+    } catch (error) {
+      const status = Number.isInteger(error.status) ? error.status : 500;
+      writeJson(res, status, {
+        error: {
+          code: status === 404 ? "NOT_FOUND" : "MIKAGE_PROMPT_COMPILE_FAILED",
+          message: error.message || "Mikage prompt compile failed",
+          details: error.body || null,
+        },
+      });
+    }
+    return;
+  }
+
+  if (
+    pathname.startsWith("/api/mikage/references/") &&
+    pathname.endsWith("/preset") &&
+    req.method === "POST"
+  ) {
+    try {
+      const referenceId = decodeURIComponent(
+        pathname.replace("/api/mikage/references/", "").replace("/preset", "")
+      );
+      const body = await readJsonBody(req);
+      const item = await createMikagePresetFromReference(referenceId, body || {});
+      writeJson(res, 201, { item });
+    } catch (error) {
+      const status = Number.isInteger(error.status) ? error.status : 500;
+      writeJson(res, status, {
+        error: {
+          code: status === 404 ? "NOT_FOUND" : "MIKAGE_REFERENCE_PRESET_CREATE_FAILED",
+          message: error.message || "Mikage reference preset create failed",
+          details: error.body || null,
+        },
+      });
+    }
+    return;
+  }
+
+  if (pathname === "/api/mikage/proof-sets" && req.method === "GET") {
+    try {
+      const items = await listMikageProofSets();
+      writeJson(res, 200, { items });
+    } catch (error) {
+      writeJson(res, 500, {
+        error: {
+          code: "MIKAGE_PROOF_SET_LIST_FAILED",
+          message: error.message || "Mikage proof sets list failed",
+        },
+      });
+    }
+    return;
+  }
+
+  if (pathname === "/api/mikage/proof-sets" && req.method === "POST") {
+    try {
+      const body = await readJsonBody(req);
+      const item = await jobController.createProofSet(body || {});
+      writeJson(res, 201, { item });
+    } catch (error) {
+      const status = Number.isInteger(error.status) ? error.status : 500;
+      writeJson(res, status, {
+        error: {
+          code: status === 400 ? "VALIDATION_ERROR" : "MIKAGE_PROOF_SET_CREATE_FAILED",
+          message: error.message || "Mikage proof set create failed",
+          details: error.body || null,
         },
       });
     }
@@ -1373,6 +2209,46 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
+  if (pathname === "/api/generate" && req.method === "POST") {
+    try {
+      const body = await readJsonBody(req);
+      const validated = validateVisualGrammarGenerateInput(body);
+      if (!validated.ok) {
+        writeJson(res, 400, {
+          error: {
+            code: "VALIDATION_ERROR",
+            message: "Invalid generate payload",
+            details: { errors: validated.errors },
+          },
+        });
+        return;
+      }
+
+      const compiled = await compileVisualGrammarPrompt({
+        presetId: validated.value.preset_id,
+        archetypeId: validated.value.archetype_id,
+        environmentId: validated.value.environment_id,
+        subject: validated.value.subject,
+        wardrobe: validated.value.wardrobe,
+        pose: validated.value.pose,
+        framing: validated.value.framing,
+      });
+
+      writeJson(res, 200, compiled);
+    } catch (error) {
+      const status = Number.isInteger(error.status) ? error.status : 500;
+      writeJson(res, status, {
+        error: {
+          code:
+            error.code ||
+            (status === 422 ? "COMPATIBILITY_BANNED" : "VISUAL_GRAMMAR_GENERATE_FAILED"),
+          message: error.message || "Visual grammar generate failed",
+        },
+      });
+    }
+    return;
+  }
+
   if (pathname !== "/api/vertex/imagen/generate" || req.method !== "POST") {
     writeJson(res, 404, {
       error: {
@@ -1476,6 +2352,7 @@ async function startServer() {
   await initializeAuditStore();
   await initializeGenerationCostStore();
   await initializeImagenQueueStore();
+  await initializeMikageWorkflowStore();
   server.listen(port, () => {
     console.log(`[muse-studio-api] listening on http://localhost:${port}`);
   });
