@@ -1,0 +1,56 @@
+apiVersion: serving.knative.dev/v1
+kind: Service
+metadata:
+  name: muse-studio-api
+  annotations:
+    run.googleapis.com/ingress: all
+spec:
+  template:
+    metadata:
+      annotations:
+        autoscaling.knative.dev/minScale: "1"
+        autoscaling.knative.dev/maxScale: "10"
+    spec:
+      serviceAccountName: studio-os-runtime
+      containers:
+        - image: __IMAGE_URI__
+          ports:
+            - containerPort: 8787
+          env:
+            - name: NODE_ENV
+              value: "production"
+            - name: PORT
+              value: "8787"
+            - name: IMAGE_PROVIDER
+              value: "imagen"
+            - name: GCP_PROJECT_ID
+              value: "__GCP_PROJECT_ID__"
+            - name: GCP_REGION
+              value: "__GCP_REGION__"
+            - name: GOOGLE_CLOUD_PROJECT
+              value: "__GCP_PROJECT_ID__"
+            - name: VERTEX_LOCATION
+              value: "__GCP_REGION__"
+            - name: VERTEX_IMAGEN_MODEL
+              value: "__VERTEX_IMAGEN_MODEL__"
+            - name: GCS_BUCKET_ASSETS
+              value: "__GCS_BUCKET_ASSETS__"
+            - name: GCS_BUCKET_ARCHIVE
+              value: "__GCS_BUCKET_ARCHIVE__"
+            - name: GCS_BUCKET_RECEIPTS
+              value: "__GCS_BUCKET_RECEIPTS__"
+            - name: BQ_DATASET_STUDIO
+              value: "__BQ_DATASET_STUDIO__"
+            - name: GOOGLE_CLOUD_WORKFLOW
+              value: "studio_pipeline"
+            - name: STORAGE_PROVIDER
+              value: "filesystem"
+            - name: STORAGE_LOCAL_DIR
+              value: "/tmp/object-assets"
+            - name: STORAGE_PUBLIC_BASE_URL
+              value: "/api/assets"
+            - name: SLA_RECOMPUTE_ADMIN_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: muse-studio-admin-token
+                  key: latest
